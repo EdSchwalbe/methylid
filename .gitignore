@@ -1,0 +1,20 @@
+# Working outputs: betas, dosage matrices, match results, scored objects.
+# All regenerable from the scripts; several hundred MB.
+work/
+
+# GEO series matrices, re-downloadable (see HANDOVER.md). ~250 MB.
+ref/geo/
+
+# Generated request bundles (make_site_list.R)
+request_*/
+
+# Internal project notes: local absolute paths and in-progress status.
+# Remove this line if you want collaborators to see it.
+HANDOVER.md
+
+# R / editor
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+.DS_Store
