@@ -40,8 +40,30 @@ read_plink_dosage <- function(prefix, rsids = NULL) {
   dos
 }
 
+# Warn when a callset looks like it only lists variants. A hom-reference call is
+# as informative here as a variant, so if they are absent we lose roughly a
+# third of the usable genotypes -- and absence is then ambiguous between
+# "matches the reference" and "no coverage", which we must treat as unknown.
+check_homref <- function(dos) {
+  per <- colMeans(dos == 0, na.rm = TRUE)
+  per[is.nan(per)] <- NA
+  bad <- which(!is.na(per) & per < 0.10)
+  if (length(bad)) {
+    message(sprintf(paste0(
+      "  WARNING: %d of %d samples have <10%% homozygous-reference calls ",
+      "(median %.1f%%).\n",
+      "  This is the signature of a variants-only callset. Hom-ref is as\n",
+      "  informative as a variant here, so matching will be weaker than it\n",
+      "  should be. Ask for all-sites calls at the marker list:\n",
+      "    bcftools mpileup -R sites.bed   or   GATK --output-mode EMIT_ALL_SITES"),
+      length(bad), ncol(dos), 100 * median(per[bad], na.rm = TRUE)))
+  }
+  invisible(per)
+}
+
 # VCF (plain or gzipped) for sequencing data. Reads the file once, keeping only
-# the requested sites, so pre-subset a WGS VCF if large.
+# the requested sites, so pre-subset a WGS VCF if large. `path` may also be a
+# directory of VCFs, or a vector of paths, e.g. one file per sample.
 #   rsids : marker rsIDs, matched against the ID column
 #   sites : optional data.frame(rsid, chrom, pos) so markers can be found by
 #           position when the ID column is "." (which is the norm for release
@@ -50,6 +72,36 @@ read_plink_dosage <- function(prefix, rsids = NULL) {
 # Allele orientation is learned downstream, so REF/ALT conventions do not
 # matter here, but a multi-allelic marker is noisier and is reported as such.
 read_vcf_dosage <- function(path, rsids = NULL, sites = NULL, min_dp = 0) {
+  # A directory, or several files, are read separately and joined on marker.
+  # One VCF per sample is the usual shape of a cohort handed over as a folder.
+  if (length(path) > 1L || (length(path) == 1L && dir.exists(path))) {
+    files <- if (length(path) > 1L) path else
+      list.files(path, "\\.vcf(\\.b?gz)?$", full.names = TRUE)
+    if (!length(files)) stop("no .vcf/.vcf.gz files in ", path)
+    message(sprintf("reading %d VCF files from %s", length(files),
+                    if (length(path) == 1L) path else "the supplied list"))
+    each <- lapply(files, function(f)
+      tryCatch(read_vcf_dosage(f, rsids, sites, min_dp),
+               error = function(e) {
+                 message("  skipping ", basename(f), ": ", conditionMessage(e))
+                 NULL
+               }))
+    each <- Filter(Negate(is.null), each)
+    if (!length(each)) stop("no usable VCF files in ", path)
+    markers <- sort(unique(unlist(lapply(each, rownames))))
+    dos <- matrix(NA_integer_, length(markers),
+                  sum(vapply(each, ncol, 1L)),
+                  dimnames = list(markers, unlist(lapply(each, colnames))))
+    j <- 0L
+    for (m in each) {
+      dos[rownames(m), j + seq_len(ncol(m))] <- m
+      j <- j + ncol(m)
+    }
+    check_homref(dos)
+    message(sprintf("combined: %d markers x %d samples, call rate %.1f%%",
+                    nrow(dos), ncol(dos), 100 * mean(!is.na(dos))))
+    return(dos)
+  }
   site_key <- NULL
   if (!is.null(sites)) {
     sites <- as.data.frame(sites)
@@ -124,6 +176,7 @@ read_vcf_dosage <- function(path, rsids = NULL, sites = NULL, min_dp = 0) {
   dimnames(dos) <- list(f[[3]], samples)
   dos <- dos[!duplicated(rownames(dos)), , drop = FALSE]
   multi <- sum(grepl(",", f[[5]], fixed = TRUE))
+  if (ncol(dos) > 1L) check_homref(dos)
   message(sprintf("VCF: %d SNPs x %d samples, call rate %.1f%%%s",
                   nrow(dos), ncol(dos), 100 * mean(!is.na(dos)),
                   if (multi) sprintf(" (%d multi-allelic)", multi) else ""))

@@ -2,6 +2,9 @@
 # Usage: Rscript extract_meth_snps.R IDAT_DIR OUT_PREFIX [NCORES] [EXTRA_PROBES]
 # EXTRA_PROBES: optional file of CpG probe IDs (e.g. probes with a SNP at the CpG
 # or extension base) whose raw betas are also written, to OUT_PREFIX_extra_beta.tsv
+#
+# Writes OUT_PREFIX_beta_all.tsv -- the rs and extra probes in one matrix, which
+# is what match_samples.R takes as --beta.
 suppressMessages({
   library(minfi)
   library(BiocParallel)
@@ -46,13 +49,22 @@ res <- bplapply(chunks, function(b) {
 snp <- do.call(cbind, lapply(res, `[[`, "snp"))
 sex <- do.call(rbind, lapply(res, `[[`, "sex"))
 colnames(snp) <- basename(colnames(snp))
+ex <- NULL
 if (length(extra)) {
   ex <- do.call(cbind, lapply(res, `[[`, "extra"))
   colnames(ex) <- basename(colnames(ex))
   write.table(ex, paste0(out_prefix, "_extra_beta.tsv"), sep = "\t", quote = FALSE, col.names = NA)
 }
+
+# the combined matrix match_samples.R expects
+all_beta <- if (is.null(ex)) snp else rbind(snp, ex[, colnames(snp), drop = FALSE])
+write.table(all_beta, paste0(out_prefix, "_beta_all.tsv"), sep = "\t",
+            quote = FALSE, col.names = NA)
 sex$array <- basename(sex$array)
 
 write.table(snp, paste0(out_prefix, "_rs_beta.tsv"), sep = "\t", quote = FALSE, col.names = NA)
 write.table(sex, paste0(out_prefix, "_sex.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
-message("done: ", ncol(snp), " samples x ", nrow(snp), " SNP probes")
+message("done: ", ncol(all_beta), " samples x ", nrow(all_beta),
+        " probes (", nrow(snp), " rs + ", nrow(all_beta) - nrow(snp), " SNP-affected)")
+message("  -> ", out_prefix, "_beta_all.tsv  (pass this as --beta)")
+message("  -> ", out_prefix, "_sex.tsv       (pass this as --sex)")

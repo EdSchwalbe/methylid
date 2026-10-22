@@ -46,6 +46,7 @@ result would be worth knowing.
 | EPICv2 extraction | **Works** on real EPICv2 IDATs: 65 rs + 7,383 probes, betas trimodal |
 | 450K / EPIC / EPICv2 marker tables | **Verified**: every feature probe present on its array |
 | PLINK, VCF, SNP6 loaders | **Round-trip tested** against real data |
+| Folder of per-sample VCFs | **Validated** on 1,097 per-sample files: 488/488 the same partner, 0 disagreements |
 | EPIC v1 IDAT reading | *Untested* — low risk (routine in minfi; all 11,661 feature probes confirmed on the manifest) |
 | **Any GSA data** | *Untested* — no manifest available. Run step 1 below against your `.bim` to get the real overlap |
 | EPIC/EPICv2 × genotypes end to end | *Untested* — needs one pilot with paired samples |
@@ -129,22 +130,55 @@ margins, but it scales with marker count so it is not portable.
 
 ## Usage
 
+### A folder of IDATs against a folder of VCFs
+
+Three commands. Set `PLATFORM` to `450k`, `epic` or `epicv2`, and `BUILD` to
+the genome build of the VCFs (`grch38` for most modern callsets).
+
 ```bash
-# 1. candidate markers for your methylation platform, optionally restricted to
-#    the SNPs your genotyping platform actually carries
+PLATFORM=epic; BUILD=grch38
+
+# 1. marker positions, so markers are found even when the VCF ID column is "."
+python3 fetch_positions.py ref/feat_$PLATFORM.tsv ref/pos_$PLATFORM.tsv $BUILD
+
+# 2. betas and inferred sex from the IDAT folder (last arg = marker probe list)
+cut -f1 ref/feat_$PLATFORM.tsv | tail -n +2 | sort -u > /tmp/probes.txt
+Rscript extract_meth_snps.R /path/to/idat_folder work/mine 16 /tmp/probes.txt
+
+# 3. match: --geno vcf: takes a directory of VCFs as well as a single file
+Rscript match_samples.R \
+  --beta     work/mine_beta_all.tsv \
+  --features ref/feat_$PLATFORM.tsv \
+  --sites    ref/pos_$PLATFORM.tsv \
+  --geno     vcf:/path/to/vcf_folder \
+  --sex      work/mine_sex.tsv \
+  --out      work/mine
+```
+
+Results land in `work/mine_matches.tsv`. Validated on 1,097 per-sample VCFs:
+identical to the PLINK route, 488/488 the same partner, 0 disagreements.
+
+**If the VCFs are variants-only this will fail**, and deliberately so: without
+homozygous-reference calls there is too little left per marker to calibrate.
+The reader warns first ("<10% homozygous-reference calls"), then the run stops
+with an explanation rather than returning weak matches. See
+"Asking a colleague for sequencing data" below.
+
+### Against a SNP array
+
+```bash
+# markers your genotyping platform actually carries
 cut -f2 your_gsa.bim > gsa_rsids.txt
-Rscript build_reference.R epic ref/feat_epic.tsv 0.05 gsa_rsids.txt
+Rscript build_reference.R epic ref/feat_epic_gsa.tsv 0.05 gsa_rsids.txt
 
-# 2. betas and inferred sex from IDATs
-Rscript extract_meth_snps.R /path/to/idats work/mine 16 ref/cpgsnp_probes.txt
+Rscript extract_meth_snps.R /path/to/idats work/mine 16 /tmp/probes.txt
 
-# 3. match
 Rscript match_samples.R \
   --beta work/mine_beta_all.tsv \
-  --features ref/feat_epic.tsv \
+  --features ref/feat_epic_gsa.tsv \
   --geno plink:/path/to/your_gsa \
   --out work/mine \
-  --sex work/mine_sexmap.tsv --geno-sex work/gsa_sexmap.tsv
+  --sex work/mine_sex.tsv --geno-sex work/gsa_sexmap.tsv
 ```
 
 `--geno` accepts `plink:PREFIX` (reads only the needed variants by seeking, so

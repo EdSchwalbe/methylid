@@ -21,9 +21,21 @@ fit_features <- function(beta, dos, feat, pairs, min_r2 = 0.5, min_pairs = 30) {
                sd = max(sigma(f), 0.02), r2 = r2)
   })
   fits <- do.call(rbind, fits)
-  fits <- fits[fits$r2 >= min_r2, ]
-  fits <- fits[order(-fits$r2), ]
-  fits[!duplicated(fits$rsid), ]
+  if (is.null(fits) || !nrow(fits))
+    stop("no marker could be calibrated: every one had fewer than ", min_pairs,
+         " training pairs with a genotype, or no genotype variation.\n",
+         "  Most often this means the genotypes are too sparse -- a ",
+         "variants-only callset\n  omits homozygous-reference calls, which ",
+         "leaves too little per marker. It can\n  also mean too few seed pairs.",
+         call. = FALSE)
+  kept <- fits[fits$r2 >= min_r2, ]
+  if (!nrow(kept))
+    stop(sprintf(paste0("no marker reached R2 >= %.2f (best was %.2f over %d ",
+         "candidates).\n  The betas and genotypes may not correspond, or the ",
+         "seed pairs may be wrong."), min_r2, max(fits$r2), nrow(fits)),
+         call. = FALSE)
+  kept <- kept[order(-kept$r2), ]
+  kept[!duplicated(kept$rsid), ]
 }
 
 score_lr <- function(beta, dos, fits, outlier = 0.02) {
