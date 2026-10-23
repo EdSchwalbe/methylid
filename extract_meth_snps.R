@@ -16,6 +16,10 @@ out_prefix <- args[2]
 ncores <- if (length(args) > 2) as.integer(args[3]) else 16
 extra <- if (length(args) > 3) readLines(args[4]) else character(0)
 
+# OUT_PREFIX may name a directory that does not exist yet (work/ is gitignored,
+# so it is absent in a fresh clone)
+dir.create(dirname(out_prefix), showWarnings = FALSE, recursive = TRUE)
+
 bases <- unique(sub("_(Grn|Red)\\.idat(\\.gz)?$", "",
                     list.files(idat_dir, pattern = "_Grn\\.idat(\\.gz)?$", full.names = TRUE)))
 message(length(bases), " arrays")

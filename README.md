@@ -130,6 +130,11 @@ margins, but it scales with marker count so it is not portable.
 
 ## Usage
 
+Output paths below are written as `work/...`. That is only a convention for
+scratch output — nothing in the repository depends on it, the scripts create
+whatever directory you name, and `work/` is gitignored so it is absent from a
+fresh clone. Point `--out` anywhere you like.
+
 ### A folder of IDATs against a folder of VCFs
 
 Three commands. Set `PLATFORM` to `450k`, `epic` or `epicv2`, and `BUILD` to

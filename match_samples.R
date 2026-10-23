@@ -43,6 +43,7 @@ opt <- local({
 })
 req <- c("beta", "features", "geno", "out")
 if (!all(req %in% names(opt))) stop("missing: ", paste(setdiff(req, names(opt)), collapse = ", "))
+dir.create(dirname(opt$out), showWarnings = FALSE, recursive = TRUE)
 min_per_snp <- as.numeric(opt$`min-per-snp` %||% 0.08)
 min_gap <- as.numeric(opt$`min-gap` %||% 5)
 min_snps <- as.numeric(opt$`min-snps` %||% 50)

@@ -8,6 +8,7 @@ Usage: fetch_positions.py FEATURE_TABLE OUT.tsv [grch37|grch38]
 Writes: rsid, chrom, pos, alleles  (one row per rsID that resolves)
 """
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -64,6 +65,9 @@ def main():
         print(f"  {min(i + BATCH, len(rsids))}/{len(rsids)}", end="\r", file=sys.stderr)
         time.sleep(0.1)
 
+    d = os.path.dirname(out_path)
+    if d:
+        os.makedirs(d, exist_ok=True)
     with open(out_path, "w") as out:
         out.write("rsid\tchrom\tpos\talleles\n")
         for r in sorted(rows, key=lambda x: (x[1], x[2])):
